@@ -132,26 +132,27 @@ class VideoCompositor {
         const isVideo = file.type.startsWith('video') || file.name.toLowerCase().endsWith('.mov');
         const type = isVideo ? 'video' : 'image';
 
-        const setupElement = (el) => {
+        const setupElement = (el, isError = false) => {
             this.layers[layerKey].element = el;
-            this.layers[layerKey].type = type;
+            this.layers[layerKey].type = isError ? 'placeholder' : type;
             this.layers[layerKey].x = 0;
             this.layers[layerKey].y = 0;
             this.layers[layerKey].scale = 1;
 
-            if (layerKey === 'background') {
+            if (layerKey === 'background' && !isError) {
                 this.duration = Math.max(this.duration, el.duration || 0);
             }
 
-            // Capture poster frame for video layers to show in preview without playing
-            if (type === 'video') {
+            if (type === 'video' && !isError) {
                 setTimeout(() => {
-                    const posterCanvas = document.createElement('canvas');
-                    posterCanvas.width = el.videoWidth;
-                    posterCanvas.height = el.videoHeight;
-                    const pCtx = posterCanvas.getContext('2d');
-                    pCtx.drawImage(el, 0, 0);
-                    this.layers[layerKey].posterFrame = posterCanvas;
+                    try {
+                        const posterCanvas = document.createElement('canvas');
+                        posterCanvas.width = el.videoWidth || 1920;
+                        posterCanvas.height = el.videoHeight || 1080;
+                        const pCtx = posterCanvas.getContext('2d');
+                        pCtx.drawImage(el, 0, 0);
+                        this.layers[layerKey].posterFrame = posterCanvas;
+                    } catch (e) { console.warn("Could not capture poster frame"); }
                 }, 500);
             }
 
@@ -165,20 +166,23 @@ class VideoCompositor {
 
         if (type === 'video') {
             const video = document.createElement('video');
-            video.src = url;
             video.muted = true;
-            video.loop = true;
             video.playsInline = true;
-            video.preload = 'auto';
 
             video.onerror = () => {
-                alert('動画の読み込みに失敗しました。コーデックの問題か、ファイルが壊れている可能性があります。');
+                console.error("Video load error: Browser likely doesn't support the codec (e.g., ProRes .mov)");
+                // Create a placeholder visual
+                const placeholder = { width: 1280, height: 720, isPlaceholder: true, name: file.name };
+                setupElement(placeholder, true);
+                alert(`通知: この動画ファイル (${file.name}) はブラウザで直接再生できない形式です。\n\n「位置合わせ用の箱」として読み込みました。このまま位置調整は可能ですが、書き出し時に反映させるには「WebM形式」での書き出しを推奨します。`);
             };
 
             video.onloadedmetadata = () => {
                 video.currentTime = 0;
                 setupElement(video);
             };
+
+            video.src = url;
             video.load();
         } else {
             const img = new Image();
@@ -244,7 +248,31 @@ class VideoCompositor {
         const { width, height } = this.canvas;
         let el = layer.element;
 
-        // If it's a video layer and we are NOT exporting, use the poster frame for character/overlay
+        // Handle placeholders (unsupported videos)
+        if (layer.type === 'placeholder') {
+            const pw = el.width * layer.scale;
+            const ph = el.height * layer.scale;
+            const px = (width / 2) + layer.x - (pw / 2);
+            const py = (height / 2) + layer.y - (ph / 2);
+
+            this.ctx.save();
+            this.ctx.globalAlpha = layer.opacity * 0.5;
+            this.ctx.fillStyle = '#3b82f6';
+            this.ctx.fillRect(px, py, pw, ph);
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(px, py, pw, ph);
+
+            this.ctx.fillStyle = '#fff';
+            this.ctx.font = '24px Inter';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(`Unsupported: ${el.name}`, px + pw / 2, py + ph / 2);
+            this.ctx.fillText("書き出し前にWebMへ変換してください", px + pw / 2, py + ph / 2 + 40);
+            this.ctx.restore();
+            return;
+        }
+
+        // If it's a video layer and we are NOT exporting, use the poster frame
         if (layer.type === 'video' && !this.isExporting && key !== 'background' && layer.posterFrame) {
             el = layer.posterFrame;
         }
