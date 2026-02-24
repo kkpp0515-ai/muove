@@ -1,0 +1,18 @@
+# Windows
+Thumbs.db
+Desktop.ini
+
+# IDEs
+.vscode/
+.idea/
+
+# Local env
+.env
+node_modules/
+dist/
+*.webm
+*.mp4
+*.png
+*.jpg
+*.jpeg
+!video_editor_tool/
