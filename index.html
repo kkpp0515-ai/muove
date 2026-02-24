@@ -73,6 +73,20 @@
                             <label>不透明度</label>
                             <input type="range" id="opacity" min="0" max="1" step="0.01" value="1">
                         </div>
+
+                        <div class="chroma-settings">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="chroma-toggle"> クロマキー除去 (Green Screen)
+                            </label>
+                            <div class="control-row">
+                                <label>除去する色</label>
+                                <input type="color" id="chroma-color" value="#00ff00">
+                            </div>
+                            <div class="control-row">
+                                <label>許容範囲 (Tolerance)</label>
+                                <input type="range" id="chroma-tolerance" min="0.01" max="0.5" step="0.01" value="0.1">
+                            </div>
+                        </div>
                     </div>
                 </section>
 

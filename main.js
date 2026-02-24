@@ -11,16 +11,18 @@ class VideoCompositor {
 
         // Layers
         this.layers = {
-            background: { element: null, type: null, data: null, x: 0, y: 0, scale: 1, opacity: 1 },
-            character: { element: null, type: null, data: null, x: 0, y: 0, scale: 1, opacity: 1 },
-            overlay: { element: null, type: null, data: null, x: 0, y: 0, scale: 1, opacity: 1 }
+            background: { element: null, type: null, x: 0, y: 0, scale: 1, opacity: 1, chromaKey: false, chromaColor: '#00ff00', tolerance: 0.1 },
+            character: { element: null, type: null, x: 0, y: 0, scale: 1, opacity: 1, chromaKey: false, chromaColor: '#00ff00', tolerance: 0.1 },
+            overlay: { element: null, type: null, x: 0, y: 0, scale: 1, opacity: 1, chromaKey: false, chromaColor: '#00ff00', tolerance: 0.1 }
         };
 
+        // Off-screen canvas for pixel manipulation (Chroma Key)
+        this.offCanvas = document.createElement('canvas');
+        this.offCtx = this.offCanvas.getContext('2d', { willReadFrequently: true });
+
         this.isPlaying = false;
-        this.startTime = 0;
         this.duration = 0;
         this.resolution = { width: 1920, height: 1080 };
-
         this.selectedLayer = 'character';
 
         this.init();
@@ -38,7 +40,7 @@ class VideoCompositor {
         document.getElementById('char-upload').addEventListener('change', (e) => this.handleUpload(e, 'character'));
         document.getElementById('overlay-upload').addEventListener('change', (e) => this.handleUpload(e, 'overlay'));
 
-        // Layer Selection logic
+        // Layer Selection
         const layerControls = document.querySelectorAll('.control-group[data-layer]');
         layerControls.forEach(group => {
             group.addEventListener('click', () => {
@@ -50,14 +52,23 @@ class VideoCompositor {
         });
 
         // Shared Controls
-        const inputs = ['posX', 'posY', 'scale', 'opacity'];
-        inputs.forEach(id => {
+        ['posX', 'posY', 'scale', 'opacity'].forEach(id => {
             document.getElementById(id).addEventListener('input', (e) => {
                 const layer = this.layers[this.selectedLayer];
                 const key = id.replace('pos', '').toLowerCase();
                 layer[key] = parseFloat(e.target.value);
-                this.updateGuide();
             });
+        });
+
+        // Chroma Key Controls
+        document.getElementById('chroma-toggle').addEventListener('change', (e) => {
+            this.layers[this.selectedLayer].chromaKey = e.target.checked;
+        });
+        document.getElementById('chroma-color').addEventListener('input', (e) => {
+            this.layers[this.selectedLayer].chromaColor = e.target.value;
+        });
+        document.getElementById('chroma-tolerance').addEventListener('input', (e) => {
+            this.layers[this.selectedLayer].tolerance = parseFloat(e.target.value);
         });
 
         // Resolution
@@ -67,16 +78,11 @@ class VideoCompositor {
             this.resizeCanvas();
         });
 
-        // Playback
         document.getElementById('play-pause-btn').addEventListener('click', () => this.togglePlayback());
-
-        // Export
         document.getElementById('export-btn').addEventListener('click', () => this.exportVideo());
 
-        // Dragging on Canvas
         let isDragging = false;
         let lastX, lastY;
-
         this.canvas.addEventListener('mousedown', (e) => {
             if (!this.layers[this.selectedLayer].element) return;
             isDragging = true;
@@ -88,26 +94,19 @@ class VideoCompositor {
             if (!isDragging) return;
             const dx = e.clientX - lastX;
             const dy = e.clientY - lastY;
-
             const rect = this.canvas.getBoundingClientRect();
             const scaleX = this.canvas.width / rect.width;
             const scaleY = this.canvas.height / rect.height;
-
             const layer = this.layers[this.selectedLayer];
             layer.x += dx * scaleX;
             layer.y += dy * scaleY;
-
             document.getElementById('posX').value = layer.x;
             document.getElementById('posY').value = layer.y;
-
             lastX = e.clientX;
             lastY = e.clientY;
-            this.updateGuide();
         });
 
-        window.addEventListener('mouseup', () => {
-            isDragging = false;
-        });
+        window.addEventListener('mouseup', () => isDragging = false);
     }
 
     syncControls() {
@@ -116,8 +115,10 @@ class VideoCompositor {
         document.getElementById('posY').value = layer.y;
         document.getElementById('scale').value = layer.scale;
         document.getElementById('opacity').value = layer.opacity;
+        document.getElementById('chroma-toggle').checked = layer.chromaKey;
+        document.getElementById('chroma-color').value = layer.chromaColor;
+        document.getElementById('chroma-tolerance').value = layer.tolerance;
 
-        // Update labels or UI to show which layer is being edited
         const layerTitle = { 'background': '背景', 'character': 'キャラクター', 'overlay': '前面' };
         document.querySelector('.control-title-active').textContent = `編集中のレイヤー: ${layerTitle[this.selectedLayer]}`;
     }
@@ -127,31 +128,27 @@ class VideoCompositor {
         if (!file) return;
 
         const url = URL.createObjectURL(file);
-        const type = file.type.startsWith('video') ? 'video' : 'image';
+        // Robust type check for .mov
+        const isVideo = file.type.startsWith('video') || file.name.toLowerCase().endsWith('.mov');
+        const type = isVideo ? 'video' : 'image';
 
         const setupElement = (el) => {
             this.layers[layerKey].element = el;
             this.layers[layerKey].type = type;
-
-            // Auto-scale to fit canvas initially but keep original size if it matches
-            const elW = el.videoWidth || el.width;
-            // Default x,y is 0 (centered)
             this.layers[layerKey].x = 0;
             this.layers[layerKey].y = 0;
-            this.layers[layerKey].scale = 1; // Maintain original scale by default
+            this.layers[layerKey].scale = 1;
 
             if (layerKey === 'background') {
                 this.duration = Math.max(this.duration, el.duration || 0);
             }
 
-            // Activate this layer's controls
             this.selectedLayer = layerKey;
             document.querySelectorAll('.control-group[data-layer]').forEach(g => {
                 g.classList.remove('active');
                 if (g.dataset.layer === layerKey) g.classList.add('active');
             });
             this.syncControls();
-            this.updateGuide();
         };
 
         if (type === 'video') {
@@ -160,8 +157,18 @@ class VideoCompositor {
             video.muted = true;
             video.loop = true;
             video.playsInline = true;
+
+            video.onerror = () => {
+                alert('動画の読み込みに失敗しました。お使いのブラウザがこのコーデック（ProRes等）をサポートしていない可能性があります。H.264 MP4形式やWebM形式をお試しください。');
+            };
+
+            video.onloadedmetadata = () => {
+                video.play().catch(() => {
+                    console.log("Auto-play prevented, waiting for user interaction");
+                });
+                setupElement(video);
+            };
             video.load();
-            video.onloadedmetadata = () => setupElement(video);
         } else {
             const img = new Image();
             img.src = url;
@@ -189,11 +196,10 @@ class VideoCompositor {
     togglePlayback() {
         this.isPlaying = !this.isPlaying;
         document.getElementById('play-pause-btn').textContent = this.isPlaying ? '⏸' : '▶';
-
         const playMethod = this.isPlaying ? 'play' : 'pause';
         Object.values(this.layers).forEach(layer => {
             if (layer.type === 'video' && layer.element) {
-                layer.element[playMethod]();
+                layer.element[playMethod]().catch(() => { });
             }
         });
     }
@@ -210,7 +216,6 @@ class VideoCompositor {
         const { width, height } = this.canvas;
         this.ctx.clearRect(0, 0, width, height);
 
-        // Draw layers in order: Background -> Character -> Overlay
         this.drawLayer('background');
         this.drawLayer('character');
         this.drawLayer('overlay');
@@ -223,36 +228,69 @@ class VideoCompositor {
         if (!layer.element) return;
 
         const { width, height } = this.canvas;
-        const element = layer.element;
+        const el = layer.element;
+        const elW = el.videoWidth || el.width;
+        const elH = el.videoHeight || el.height;
+        const sw = elW * layer.scale;
+        const sh = elH * layer.scale;
 
         this.ctx.save();
         this.ctx.globalAlpha = layer.opacity;
 
-        const elW = element.videoWidth || element.width;
-        const elH = element.videoHeight || element.height;
+        const dx = (width / 2) + layer.x - (sw / 2);
+        const dy = (height / 2) + layer.y - (sh / 2);
 
-        const scaledW = elW * layer.scale;
-        const scaledH = elH * layer.scale;
-
-        // Render centered + x, y offset
-        this.ctx.drawImage(
-            element,
-            (width / 2) + layer.x - (scaledW / 2),
-            (height / 2) + layer.y - (scaledH / 2),
-            scaledW,
-            scaledH
-        );
-
+        if (layer.chromaKey) {
+            this.applyChromaKey(el, dx, dy, sw, sh, layer.chromaColor, layer.tolerance);
+        } else {
+            this.ctx.drawImage(el, dx, dy, sw, sh);
+        }
         this.ctx.restore();
+    }
+
+    applyChromaKey(el, x, y, w, h, targetHex, tolerance) {
+        // Prepare off-screen canvas scale
+        this.offCanvas.width = el.videoWidth || el.width;
+        this.offCanvas.height = el.videoHeight || el.height;
+        this.offCtx.drawImage(el, 0, 0);
+
+        const imageData = this.offCtx.getImageData(0, 0, this.offCanvas.width, this.offCanvas.height);
+        const data = imageData.data;
+
+        // Parse target color
+        const rT = parseInt(targetHex.slice(1, 3), 16);
+        const gT = parseInt(targetHex.slice(3, 5), 16);
+        const bT = parseInt(targetHex.slice(5, 7), 16);
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // simple color distance
+            const diff = Math.sqrt(
+                Math.pow(r - rT, 2) +
+                Math.pow(g - gT, 2) +
+                Math.pow(b - bT, 2)
+            ) / 441.67; // normalize by max distance
+
+            if (diff < tolerance) {
+                data[i + 3] = 0; // Transparent
+            } else if (diff < tolerance + 0.05) {
+                // Smooth edge
+                data[i + 3] = ((diff - tolerance) / 0.05) * 255;
+            }
+        }
+
+        this.offCtx.putImageData(imageData, 0, 0);
+        this.ctx.drawImage(this.offCanvas, x, y, w, h);
     }
 
     updateTimeline() {
         if (!this.layers.background.element || this.layers.background.type !== 'video') return;
-
         const video = this.layers.background.element;
         const progress = (video.currentTime / video.duration) * 100;
         document.getElementById('progress-bar').style.width = `${progress}%`;
-
         const current = this.formatTime(video.currentTime);
         const total = this.formatTime(video.duration);
         document.getElementById('time-display').textContent = `${current} / ${total}`;
@@ -271,7 +309,6 @@ class VideoCompositor {
         const stream = this.canvas.captureStream(30);
         const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
         const chunks = [];
-
         recorder.ondataavailable = (e) => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
@@ -283,19 +320,15 @@ class VideoCompositor {
             overlay.classList.add('hidden');
         };
 
-        // Reset and play
         Object.values(this.layers).forEach(layer => {
             if (layer.type === 'video' && layer.element) {
                 layer.element.currentTime = 0;
-                layer.element.play();
+                layer.element.play().catch(() => { });
             }
         });
 
         recorder.start();
-
         const duration = (this.layers.background.element?.duration || 5) * 1000;
-
-        // Progress simulation
         let elapsed = 0;
         const interval = setInterval(() => {
             elapsed += 100;
