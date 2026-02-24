@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,11 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Outfit:wght@400;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body class="dark-theme">
     <div id="app">
         <header>
@@ -25,37 +29,45 @@
 
         <main>
             <aside class="sidebar">
-                <section class="control-group">
-                    <h3><span class="dot"></span> テンプレート素材 (AE/PSD互換)</h3>
+                <section class="control-group" data-layer="background">
+                    <h3><span class="dot"></span> テンプレート素材 (背景)</h3>
                     <div class="file-input-wrapper">
-                        <label for="bg-upload">背景 (Background MP4)</label>
+                        <label for="bg-upload">背景動画 (Background MP4)</label>
                         <input type="file" id="bg-upload" accept="video/*">
                     </div>
+                </section>
+
+                <section class="control-group" data-layer="overlay">
+                    <h3><span class="dot"></span> テンプレート素材 (前面)</h3>
                     <div class="file-input-wrapper">
-                        <label for="overlay-upload">前面オーバーレイ (Overlay PNG/MP4)</label>
+                        <label for="overlay-upload">前面オーバーレイ (PNG/MP4)</label>
                         <input type="file" id="overlay-upload" accept="video/*,image/*">
                     </div>
                 </section>
 
-                <section class="control-group active">
-                    <h3><span class="dot highlight"></span> キャラクター素材 (Replacement)</h3>
+                <section class="control-group active" data-layer="character">
+                    <h3><span class="dot highlight"></span> キャラクター素材 (差し替え)</h3>
                     <div class="file-input-wrapper highlight-border">
                         <label for="char-upload">差し替え用キャラ (PNG/MOV)</label>
                         <input type="file" id="char-upload" accept="video/*,image/*">
                     </div>
-                    
+                </section>
+
+                <section class="control-group" id="transform-panel">
+                    <h3 class="control-title-active">編集中のレイヤー: キャラクター</h3>
+                    <p class="hint">キャンバス上をドラッグして移動できます</p>
                     <div class="transform-controls">
                         <div class="control-row">
                             <label>位置 X</label>
-                            <input type="range" id="posX" min="-1000" max="1000" value="0">
+                            <input type="range" id="posX" min="-2000" max="2000" value="0">
                         </div>
                         <div class="control-row">
                             <label>位置 Y</label>
-                            <input type="range" id="posY" min="-1000" max="1000" value="0">
+                            <input type="range" id="posY" min="-2000" max="2000" value="0">
                         </div>
                         <div class="control-row">
-                            <label>スケール</label>
-                            <input type="range" id="scale" min="0.1" max="3" step="0.01" value="1">
+                            <label>スケール (1.0 = 元のサイズ)</label>
+                            <input type="range" id="scale" min="0.01" max="5" step="0.01" value="1">
                         </div>
                         <div class="control-row">
                             <label>不透明度</label>
@@ -82,7 +94,7 @@
                     <canvas id="main-canvas"></canvas>
                     <div id="transform-guide" class="guide hidden"></div>
                 </div>
-                
+
                 <div class="timeline-bar">
                     <div class="timeline-controls">
                         <button id="play-pause-btn">▶</button>
@@ -102,4 +114,5 @@
     </div>
     <script src="main.js"></script>
 </body>
+
 </html>
