@@ -21,6 +21,7 @@ class VideoCompositor {
         this.offCtx = this.offCanvas.getContext('2d', { willReadFrequently: true });
 
         this.isPlaying = false;
+        this.isExporting = false;
         this.duration = 0;
         this.resolution = { width: 1920, height: 1080 };
         this.selectedLayer = 'character';
@@ -128,7 +129,6 @@ class VideoCompositor {
         if (!file) return;
 
         const url = URL.createObjectURL(file);
-        // Robust type check for .mov
         const isVideo = file.type.startsWith('video') || file.name.toLowerCase().endsWith('.mov');
         const type = isVideo ? 'video' : 'image';
 
@@ -141,6 +141,18 @@ class VideoCompositor {
 
             if (layerKey === 'background') {
                 this.duration = Math.max(this.duration, el.duration || 0);
+            }
+
+            // Capture poster frame for video layers to show in preview without playing
+            if (type === 'video') {
+                setTimeout(() => {
+                    const posterCanvas = document.createElement('canvas');
+                    posterCanvas.width = el.videoWidth;
+                    posterCanvas.height = el.videoHeight;
+                    const pCtx = posterCanvas.getContext('2d');
+                    pCtx.drawImage(el, 0, 0);
+                    this.layers[layerKey].posterFrame = posterCanvas;
+                }, 500);
             }
 
             this.selectedLayer = layerKey;
@@ -157,15 +169,14 @@ class VideoCompositor {
             video.muted = true;
             video.loop = true;
             video.playsInline = true;
+            video.preload = 'auto';
 
             video.onerror = () => {
-                alert('動画の読み込みに失敗しました。お使いのブラウザがこのコーデック（ProRes等）をサポートしていない可能性があります。H.264 MP4形式やWebM形式をお試しください。');
+                alert('動画の読み込みに失敗しました。コーデックの問題か、ファイルが壊れている可能性があります。');
             };
 
             video.onloadedmetadata = () => {
-                video.play().catch(() => {
-                    console.log("Auto-play prevented, waiting for user interaction");
-                });
+                video.currentTime = 0;
                 setupElement(video);
             };
             video.load();
@@ -196,12 +207,15 @@ class VideoCompositor {
     togglePlayback() {
         this.isPlaying = !this.isPlaying;
         document.getElementById('play-pause-btn').textContent = this.isPlaying ? '⏸' : '▶';
+
         const playMethod = this.isPlaying ? 'play' : 'pause';
-        Object.values(this.layers).forEach(layer => {
-            if (layer.type === 'video' && layer.element) {
-                layer.element[playMethod]().catch(() => { });
-            }
-        });
+
+        // Only play the background in preview mode to keep it light
+        if (this.layers.background.element && this.layers.background.type === 'video') {
+            this.layers.background.element[playMethod]().catch(() => { });
+        }
+
+        // Character and Overlay stay static in preview as per request
     }
 
     startRenderLoop() {
@@ -228,7 +242,13 @@ class VideoCompositor {
         if (!layer.element) return;
 
         const { width, height } = this.canvas;
-        const el = layer.element;
+        let el = layer.element;
+
+        // If it's a video layer and we are NOT exporting, use the poster frame for character/overlay
+        if (layer.type === 'video' && !this.isExporting && key !== 'background' && layer.posterFrame) {
+            el = layer.posterFrame;
+        }
+
         const elW = el.videoWidth || el.width;
         const elH = el.videoHeight || el.height;
         const sw = elW * layer.scale;
@@ -303,6 +323,7 @@ class VideoCompositor {
     }
 
     async exportVideo() {
+        this.isExporting = true;
         const overlay = document.getElementById('loading-overlay');
         overlay.classList.remove('hidden');
 
@@ -318,8 +339,10 @@ class VideoCompositor {
             a.download = `composite_export_${Date.now()}.webm`;
             a.click();
             overlay.classList.add('hidden');
+            this.isExporting = false;
         };
 
+        // Reset and play ALL layers for export
         Object.values(this.layers).forEach(layer => {
             if (layer.type === 'video' && layer.element) {
                 layer.element.currentTime = 0;
