@@ -77,6 +77,22 @@ class VideoCompositor {
             const [w, h] = e.target.value.split('x').map(Number);
             this.resolution = { width: w, height: h };
             this.resizeCanvas();
+            // Automatically center all layers on resolution change
+            Object.keys(this.layers).forEach(k => {
+                this.layers[k].x = 0;
+                this.layers[k].y = 0;
+            });
+            this.syncControls();
+        });
+
+        // Quick Actions
+        document.getElementById('fit-v-btn').addEventListener('click', () => this.fitLayer('height'));
+        document.getElementById('fit-h-btn').addEventListener('click', () => this.fitLayer('width'));
+        document.getElementById('center-btn').addEventListener('click', () => {
+            const layer = this.layers[this.selectedLayer];
+            layer.x = 0;
+            layer.y = 0;
+            this.syncControls();
         });
 
         document.getElementById('play-pause-btn').addEventListener('click', () => this.togglePlayback());
@@ -120,7 +136,7 @@ class VideoCompositor {
         document.getElementById('chroma-color').value = layer.chromaColor;
         document.getElementById('chroma-tolerance').value = layer.tolerance;
 
-        const layerTitle = { 'background': '背景', 'character': 'キャラクター', 'overlay': '前面' };
+        const layerTitle = { 'background': '背景 / 動画', 'character': '素材 / 帯', 'overlay': '前景 / ロゴ' };
         document.querySelector('.control-title-active').textContent = `編集中のレイヤー: ${layerTitle[this.selectedLayer]}`;
     }
 
@@ -157,6 +173,22 @@ class VideoCompositor {
             }
 
             this.selectedLayer = layerKey;
+
+            // Smart auto-fit for new uploads
+            if (layerKey === 'background' || !isError) {
+                // For main videos/backgrounds, fit to canvas height by default
+                // This is useful for placing vertical video in square/landscape
+                const elW = el.videoWidth || el.width;
+                const elH = el.videoHeight || el.height;
+
+                // If it's a vertical video and target is not vertical, fit height
+                if (elH > elW && this.canvas.height < this.canvas.width) {
+                    this.layers[layerKey].scale = this.canvas.height / elH;
+                } else if (elW > elH && this.canvas.width < this.canvas.height) {
+                    this.layers[layerKey].scale = this.canvas.width / elW;
+                }
+            }
+
             document.querySelectorAll('.control-group[data-layer]').forEach(g => {
                 g.classList.remove('active');
                 if (g.dataset.layer === layerKey) g.classList.add('active');
@@ -194,6 +226,24 @@ class VideoCompositor {
     resizeCanvas() {
         this.canvas.width = this.resolution.width;
         this.canvas.height = this.resolution.height;
+    }
+
+    fitLayer(dimension) {
+        const layer = this.layers[this.selectedLayer];
+        if (!layer.element) return;
+
+        const elW = layer.element.videoWidth || layer.element.width;
+        const elH = layer.element.videoHeight || layer.element.height;
+
+        if (dimension === 'height') {
+            layer.scale = this.canvas.height / elH;
+        } else {
+            layer.scale = this.canvas.width / elW;
+        }
+
+        layer.x = 0;
+        layer.y = 0;
+        this.syncControls();
     }
 
     updateGuide() {
@@ -356,15 +406,26 @@ class VideoCompositor {
         overlay.classList.remove('hidden');
 
         const stream = this.canvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
+
+        // Try MP4 first, fallback to WebM if not supported
+        let options = { mimeType: 'video/mp4; codecs=avc1.42E01E' };
+        let extension = 'mp4';
+
+        if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+            console.warn("video/mp4 not supported, falling back to video/webm");
+            options = { mimeType: 'video/webm; codecs=vp9' };
+            extension = 'webm';
+        }
+
+        const recorder = new MediaRecorder(stream, options);
         const chunks = [];
         recorder.ondataavailable = (e) => chunks.push(e.data);
         recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'video/webm' });
+            const blob = new Blob(chunks, { type: options.mimeType });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `composite_export_${Date.now()}.webm`;
+            a.download = `composite_export_${Date.now()}.${extension}`;
             a.click();
             overlay.classList.add('hidden');
             this.isExporting = false;

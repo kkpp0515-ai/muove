@@ -30,26 +30,26 @@
         <main>
             <aside class="sidebar">
                 <section class="control-group" data-layer="background">
-                    <h3><span class="dot"></span> テンプレート素材 (背景)</h3>
+                    <h3><span class="dot"></span> メイン動画 (Background)</h3>
                     <div class="file-input-wrapper">
-                        <label for="bg-upload">背景動画 (Background MP4)</label>
+                        <label for="bg-upload">元動画 (MP4)</label>
                         <input type="file" id="bg-upload" accept="video/*">
                     </div>
                 </section>
 
-                <section class="control-group" data-layer="overlay">
-                    <h3><span class="dot"></span> テンプレート素材 (前面)</h3>
-                    <div class="file-input-wrapper">
-                        <label for="overlay-upload">前面オーバーレイ (PNG/MP4)</label>
-                        <input type="file" id="overlay-upload" accept="video/*,image/*">
+                <section class="control-group active" data-layer="character">
+                    <h3><span class="dot highlight"></span> 透過PNG / 帯 (Bands)</h3>
+                    <div class="file-input-wrapper highlight-border">
+                        <label for="char-upload">透過PNG / 素材</label>
+                        <input type="file" id="char-upload" accept="video/*,image/*">
                     </div>
                 </section>
 
-                <section class="control-group active" data-layer="character">
-                    <h3><span class="dot highlight"></span> キャラクター素材 (差し替え)</h3>
-                    <div class="file-input-wrapper highlight-border">
-                        <label for="char-upload">差し替え用キャラ (PNG/MOV)</label>
-                        <input type="file" id="char-upload" accept="video/*,image/*">
+                <section class="control-group" data-layer="overlay">
+                    <h3><span class="dot"></span> ロゴ / 前景 (Logo/Overlay)</h3>
+                    <div class="file-input-wrapper">
+                        <label for="overlay-upload">前面ロゴなど (PNG/MP4)</label>
+                        <input type="file" id="overlay-upload" accept="video/*,image/*">
                     </div>
                 </section>
 
@@ -74,6 +74,12 @@
                             <input type="range" id="opacity" min="0" max="1" step="0.01" value="1">
                         </div>
 
+                        <div class="quick-actions">
+                            <button id="fit-v-btn" class="secondary-btn">↕ 縦にフィット</button>
+                            <button id="fit-h-btn" class="secondary-btn">↔ 横にフィット</button>
+                            <button id="center-btn" class="secondary-btn">🎯 中央寄せ</button>
+                        </div>
+
                         <div class="chroma-settings">
                             <label class="checkbox-label">
                                 <input type="checkbox" id="chroma-toggle"> クロマキー除去 (Green Screen)
@@ -91,11 +97,11 @@
                 </section>
 
                 <section class="control-group">
-                    <h3><span class="dot"></span> レンダリング設定</h3>
+                    <h3><span class="dot"></span> 出力解像度 (Target Resolution)</h3>
                     <div class="control-row">
-                        <label>解像度</label>
                         <select id="resolution">
-                            <option value="1920x1080">Full HD (1920x1080)</option>
+                            <option value="1920x1080">Landscape (1920x1080)</option>
+                            <option value="1080x1080">Square (1080x1080)</option>
                             <option value="1080x1920">Vertical (1080x1920)</option>
                             <option value="1280x720">HD (1280x720)</option>
                         </select>
