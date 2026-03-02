@@ -405,7 +405,40 @@ class VideoCompositor {
         const overlay = document.getElementById('loading-overlay');
         overlay.classList.remove('hidden');
 
-        const stream = this.canvas.captureStream(30);
+        // Prepare audio mixing
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const dest = audioCtx.createMediaStreamDestination();
+        let hasAudio = false;
+
+        // Reset and play ALL layers for export, and capture audio
+        Object.values(this.layers).forEach(layer => {
+            if (layer.type === 'video' && layer.element) {
+                layer.element.currentTime = 0;
+                layer.element.muted = false; // Unmute for recording
+
+                try {
+                    const source = audioCtx.createMediaElementSource(layer.element);
+                    source.connect(dest);
+                    source.connect(audioCtx.destination); // Also play through speakers/preview
+                    hasAudio = true;
+                } catch (e) {
+                    console.warn("Audio capture not possible for a layer, might be cross-origin or already connected", e);
+                }
+
+                layer.element.play().catch(() => { });
+            }
+        });
+
+        const canvasStream = this.canvas.captureStream(30);
+        const finalStream = new MediaStream();
+
+        // Add video track
+        canvasStream.getVideoTracks().forEach(track => finalStream.addTrack(track));
+
+        // Add audio track if available
+        if (hasAudio) {
+            dest.stream.getAudioTracks().forEach(track => finalStream.addTrack(track));
+        }
 
         // Try MP4 first, fallback to WebM if not supported
         let options = { mimeType: 'video/mp4; codecs=avc1.42E01E' };
@@ -417,7 +450,7 @@ class VideoCompositor {
             extension = 'webm';
         }
 
-        const recorder = new MediaRecorder(stream, options);
+        const recorder = new MediaRecorder(finalStream, options);
         const chunks = [];
         recorder.ondataavailable = (e) => chunks.push(e.data);
         recorder.onstop = () => {
@@ -429,15 +462,15 @@ class VideoCompositor {
             a.click();
             overlay.classList.add('hidden');
             this.isExporting = false;
-        };
 
-        // Reset and play ALL layers for export
-        Object.values(this.layers).forEach(layer => {
-            if (layer.type === 'video' && layer.element) {
-                layer.element.currentTime = 0;
-                layer.element.play().catch(() => { });
-            }
-        });
+            // Clean up audio
+            audioCtx.close();
+            Object.values(this.layers).forEach(layer => {
+                if (layer.type === 'video' && layer.element) {
+                    layer.element.muted = true; // Re-mute
+                }
+            });
+        };
 
         recorder.start();
         const duration = (this.layers.background.element?.duration || 5) * 1000;
